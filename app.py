@@ -1,14 +1,24 @@
+import os
+from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 import datetime
-import os
 import re
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_very_secret_key' # Change this to a real secret key
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Configure upload folder and max file size
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
+
+# Ensure the upload folder exists
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -34,6 +44,7 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     price = db.Column(db.Float, nullable=False)
+    image_filename = db.Column(db.String(255), nullable=True)
 
 class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -111,7 +122,16 @@ def manage_products():
     if request.method == 'POST':
         name = request.form.get('name')
         price = float(request.form.get('price'))
-        new_product = Product(name=name, price=price)
+        
+        image = request.files.get('image')
+        image_filename = None
+        if image and image.filename:
+            filename = secure_filename(image.filename)
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            image.save(image_path)
+            image_filename = filename
+
+        new_product = Product(name=name, price=price, image_filename=image_filename)
         db.session.add(new_product)
         db.session.commit()
         flash('Product added successfully!', 'success')
