@@ -135,6 +135,7 @@ def edit_product(product_id):
             # Save new image
             image_filename = image.filename
             image_path = os.path.join(app.root_path, 'static', 'uploads', image_filename)
+            os.makedirs(os.path.dirname(image_path), exist_ok=True) # Added this line to fix the error
             image.save(image_path)
             product.image_filename = image_filename
         
