@@ -5,7 +5,7 @@
 <div class="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-lg border border-gray-200">
 <h1 class="text-4xl font-bold text-gray-800 mb-4">Welcome to Your POS System!</h1>
 <p class="text-gray-600 text-center max-w-lg mb-6">
-This is your main dashboard. From here, you can navigate to manage products, process sales, and view your sales history. Use the links in the navigation bar at the top to get started.
+This is your main dashboard. From here, you can navigate to manage products, process sales, and view your sales history. Use the links below or in the navigation bar at the top to get started.
 </p>
 <div class="flex flex-col sm:flex-row gap-4">
 <a href="{{ url_for('manage_products') }}" class="w-full sm:w-auto bg-blue-600 text-white font-semibold py-3 px-6 rounded-full hover:bg-blue-700 transition-colors duration-300 text-center">
@@ -13,6 +13,9 @@ Manage Products
 </a>
 <a href="{{ url_for('process_sales') }}" class="w-full sm:w-auto bg-green-600 text-white font-semibold py-3 px-6 rounded-full hover:bg-green-700 transition-colors duration-300 text-center">
 Process a Sale
+</a>
+<a href="{{ url_for('sales_history') }}" class="w-full sm:w-auto bg-purple-600 text-white font-semibold py-3 px-6 rounded-full hover:bg-purple-700 transition-colors duration-300 text-center">
+View Sales History
 </a>
 </div>
 </div>
