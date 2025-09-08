@@ -5,7 +5,7 @@ import datetime
 import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_very_secret_key'  # Change this to a real secret key
+app.config['SECRET_KEY'] = 'your_very_secret_key' # Change this to a real secret key
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -45,10 +45,10 @@ with app.app_context():
     db.create_all()
     # Add a default admin user if the database is new
     if not User.query.filter_by(username='admin').first():
-        admin_user = User(username='admin', password='password') # Use a more secure password in a real app
+        admin_user = User(username='admin', password='pass123') # Use a more secure password in a real app
         db.session.add(admin_user)
         db.session.commit()
-        print("Default admin user created with username 'admin' and password 'password'")
+        print("Default admin user created with username 'admin' and password 'pass123'")
 
 # User Loader for Flask-Login
 @login_manager.user_loader
