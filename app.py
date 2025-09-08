@@ -1,197 +1,179 @@
-import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from flask_sqlalchemy import SQLAlchemy
+import datetime
+import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key_here' # You should use a strong, random key in production
-
+app.config['SECRET_KEY'] = 'your_very_secret_key'  # Change this to a real secret key
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# --- In-memory Data Stores (for demonstration purposes) ---
-# In a real application, you would use a database like PostgreSQL or SQLite.
+# In-memory data for demonstration
 products = {
-    "1": {"name": "Laptop", "price": 1200.00},
-    "2": {"name": "Mouse", "price": 25.00},
-    "3": {"name": "Keyboard", "price": 75.00},
+    "1": {"name": "Apple", "price": 0.5},
+    "2": {"name": "Banana", "price": 0.3},
+    "3": {"name": "Orange", "price": 0.6},
 }
 
 sales_history = []
-current_transaction = []
+active_transaction = []
 
-# Dummy user data for demonstration
-users = {
-    "admin": {"password": "password123"},
-    "user1": {"password": "userpass"}
-}
+# Database Models
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
 
-class User(UserMixin):
-    def __init__(self, id):
-        self.id = id
-    
-    def get_id(self):
-        return str(self.id)
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    price = db.Column(db.Float, nullable=False)
 
+class Sale(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    total_amount = db.Column(db.Float, nullable=False)
+    items = db.Column(db.String(500), nullable=False) # Store as a string or JSON
+
+# Move database initialization outside of __main__ block
+with app.app_context():
+    db.create_all()
+    # Add a default admin user if the database is new
+    if not User.query.filter_by(username='admin').first():
+        admin_user = User(username='admin', password='password') # Use a more secure password in a real app
+        db.session.add(admin_user)
+        db.session.commit()
+        print("Default admin user created with username 'admin' and password 'password'")
+
+# User Loader for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
-    """
-    Required user loader for Flask-Login.
-    Loads a user from the dummy database.
-    """
-    if user_id in users:
-        return User(user_id)
-    return None
+    return User.query.get(int(user_id))
 
-# --- Helper Functions ---
-def get_total_sales():
-    """Calculates the total revenue from all completed sales transactions."""
-    total = 0.0
-    for sale in sales_history:
-        total += sale['total']
-    return total
+# Routes
+@app.route('/')
+@login_required
+def index():
+    return render_template('index.html')
 
-def get_total_items_sold():
-    """Counts the total number of items sold across all transactions."""
-    total = 0
-    for sale in sales_history:
-        for item in sale['items']:
-            total += item['quantity']
-    return total
-
-# --- Routes ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """
-    Handles user login.
-    """
     if current_user.is_authenticated:
-        return redirect(url_for('home'))
+        return redirect(url_for('index'))
     
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        if username in users and users[username]['password'] == password:
-            user = User(username)
+        user = User.query.filter_by(username=username).first()
+        
+        # Simple password check for demonstration
+        if user and user.password == password:
             login_user(user)
-            return redirect(url_for('home'))
+            flash('Logged in successfully!', 'success')
+            return redirect(url_for('index'))
         else:
-            flash('Invalid username or password', 'error')
+            flash('Invalid username or password.', 'error')
     
     return render_template('login.html')
 
 @app.route('/logout')
 @login_required
 def logout():
-    """
-    Handles user logout.
-    """
     logout_user()
+    flash('You have been logged out.', 'success')
     return redirect(url_for('login'))
-
-
-@app.route('/')
-@login_required
-def home():
-    """
-    Renders the main dashboard page.
-    Displays key metrics like total sales and items sold.
-    """
-    total_sales = get_total_sales()
-    total_items = get_total_items_sold()
-    return render_template('index.html', total_sales=total_sales, total_items=total_items)
 
 @app.route('/products', methods=['GET', 'POST'])
 @login_required
 def manage_products():
-    """
-    Handles displaying and adding new products.
-    GET: Renders the products management page with a list of all products.
-    POST: Processes the form submission to add a new product to the system.
-    """
     if request.method == 'POST':
-        product_id = str(len(products) + 1)
-        product_name = request.form['name']
-        try:
-            product_price = float(request.form['price'])
-            products[product_id] = {"name": product_name, "price": product_price}
-        except ValueError:
-            # Handle cases where price is not a valid number
-            pass
+        name = request.form.get('name')
+        price = float(request.form.get('price'))
+        new_product = Product(name=name, price=price)
+        db.session.add(new_product)
+        db.session.commit()
+        flash('Product added successfully!', 'success')
         return redirect(url_for('manage_products'))
-    
-    return render_template('products.html', products=products)
+
+    all_products = Product.query.all()
+    # Convert query result to a dictionary for easy access in template
+    products_dict = {str(p.id): p for p in all_products}
+    return render_template('products.html', products=products_dict)
 
 @app.route('/sales', methods=['GET', 'POST'])
 @login_required
 def process_sales():
-    """
-    Handles the sales transaction process.
-    GET: Renders the sales page, showing the current transaction.
-    POST: Processes the addition of an item to the current transaction.
-    """
-    global current_transaction
+    global active_transaction
     
     if request.method == 'POST':
-        product_id = request.form['product_id']
-        try:
-            quantity = int(request.form['quantity'])
-            if quantity > 0 and product_id in products:
-                product = products[product_id]
-                current_transaction.append({
-                    "id": product_id,
-                    "name": product["name"],
-                    "price": product["price"],
-                    "quantity": quantity,
-                    "subtotal": product["price"] * quantity
-                })
-        except (ValueError, KeyError):
-            # Handle cases where quantity is not a valid number or product doesn't exist
-            pass
-        return redirect(url_for('process_sales'))
+        product_id = request.form.get('product_id')
+        quantity = int(request.form.get('quantity'))
+        
+        product = Product.query.get(int(product_id))
+        if product:
+            item = {
+                'id': product.id,
+                'name': product.name,
+                'price': product.price,
+                'quantity': quantity,
+                'subtotal': product.price * quantity
+            }
+            active_transaction.append(item)
+            flash(f'{item["name"]} added to cart.', 'success')
+        else:
+            flash('Product not found.', 'error')
+
+    total = sum(item['subtotal'] for item in active_transaction)
+    all_products = Product.query.all()
+    products_dict = {str(p.id): p for p in all_products}
     
-    transaction_total = sum(item['subtotal'] for item in current_transaction)
-    return render_template('sales.html', products=products, transaction=current_transaction, total=transaction_total)
+    return render_template('sales.html', products=products_dict, transaction=active_transaction, total=total)
 
 @app.route('/complete_sale', methods=['POST'])
 @login_required
 def complete_sale():
-    """
-    Finalizes the current sales transaction and saves it to history.
-    """
-    global current_transaction
-    if current_transaction:
-        sales_history.append({
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "items": current_transaction,
-            "total": sum(item['subtotal'] for item in current_transaction)
-        })
-        current_transaction = []  # Reset the current transaction
+    global active_transaction, sales_history
+    if not active_transaction:
+        flash('Cannot complete an empty sale.', 'error')
+        return redirect(url_for('process_sales'))
+    
+    total_amount = sum(item['subtotal'] for item in active_transaction)
+    
+    # Store items as a simple string for now
+    items_str = ", ".join([f'{item["name"]} x{item["quantity"]}' for item in active_transaction])
+    
+    new_sale = Sale(total_amount=total_amount, items=items_str)
+    db.session.add(new_sale)
+    db.session.commit()
+    
+    # Clear the active transaction
+    active_transaction = []
+    
+    flash('Sale completed successfully!', 'success')
     return redirect(url_for('process_sales'))
 
 @app.route('/cancel_sale', methods=['POST'])
 @login_required
 def cancel_sale():
-    """
-    Clears the current sales transaction without saving.
-    """
-    global current_transaction
-    current_transaction = []
+    global active_transaction
+    active_transaction = []
+    flash('Sale cancelled.', 'info')
     return redirect(url_for('process_sales'))
 
 @app.route('/history')
 @login_required
-def view_history():
-    """
-    Renders the sales history page.
-    """
-    return render_template('history.html', sales=sales_history)
+def sales_history():
+    all_sales = Sale.query.order_by(Sale.timestamp.desc()).all()
+    return render_template('history.html', sales=all_sales)
 
-
-# --- Main entry point ---
 if __name__ == '__main__':
-    app.run(debug=True)
-
-# This block is for local development only. Gunicorn handles this in production.
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # This block is now only for local development
+    try:
+        app.run(debug=True)
+    except Exception as e:
+        print(f"An error occurred during local application startup: {e}")
