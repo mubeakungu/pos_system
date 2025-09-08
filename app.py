@@ -1,24 +1,13 @@
-import os
-from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 import datetime
-import re
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_very_secret_key' # Change this to a real secret key
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Configure upload folder and max file size
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
-
-# Ensure the upload folder exists
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
-
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -71,22 +60,18 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def index():
-    # Fetch data from the database to populate the dashboard
-    all_sales = Sale.query.all()
     all_products = Product.query.all()
-    
-    total_sales = sum(sale.total_amount for sale in all_sales)
+    total_sales = db.session.query(db.func.sum(Sale.total_amount)).scalar() or 0
     
     total_items = 0
-    # The current 'items' field is a string, so we need to parse it to get a count.
-    # A better approach would be to store item data in a structured format like JSON.
+    all_sales = Sale.query.all()
     for sale in all_sales:
-        # Example parsing: "Apple x1, Banana x2" -> 1 + 2 = 3
-        items_list = sale.items.split(', ')
-        for item_str in items_list:
-            match = re.search(r'x(\d+)', item_str)
-            if match:
-                total_items += int(match.group(1))
+        # Assuming items are stored as a comma-separated string, e.g., "Apple x2, Banana x1"
+        item_list = sale.items.split(', ')
+        for item_str in item_list:
+            parts = item_str.split(' x')
+            if len(parts) == 2 and parts[1].isdigit():
+                total_items += int(parts[1])
 
     return render_template('index.html', total_sales=total_sales, total_items=total_items, products=all_products)
 
@@ -123,15 +108,15 @@ def manage_products():
     if request.method == 'POST':
         name = request.form.get('name')
         price = float(request.form.get('price'))
-        
         image = request.files.get('image')
         image_filename = None
-        if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            image.save(image_path)
-            image_filename = filename
 
+        if image and image.filename:
+            image_filename = image.filename
+            image_path = os.path.join(app.root_path, 'static', 'uploads', image_filename)
+            os.makedirs(os.path.dirname(image_path), exist_ok=True)
+            image.save(image_path)
+            
         new_product = Product(name=name, price=price, image_filename=image_filename)
         db.session.add(new_product)
         db.session.commit()
@@ -150,34 +135,35 @@ def edit_product(product_id):
     if request.method == 'POST':
         product.name = request.form.get('name')
         product.price = float(request.form.get('price'))
-        
         image = request.files.get('image')
+
         if image and image.filename:
             # Delete old image if it exists
             if product.image_filename:
-                old_image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image_filename)
+                old_image_path = os.path.join(app.root_path, 'static', 'uploads', product.image_filename)
                 if os.path.exists(old_image_path):
                     os.remove(old_image_path)
             
-            filename = secure_filename(image.filename)
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            # Save new image
+            image_filename = image.filename
+            image_path = os.path.join(app.root_path, 'static', 'uploads', image_filename)
             image.save(image_path)
-            product.image_filename = filename
-
+            product.image_filename = image_filename
+        
         db.session.commit()
         flash('Product updated successfully!', 'success')
         return redirect(url_for('manage_products'))
-    
     return render_template('edit_product.html', product=product)
+
 
 @app.route('/products/delete/<int:product_id>', methods=['POST'])
 @login_required
 def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
     
-    # Delete the associated image file
+    # Delete the associated image file if it exists
     if product.image_filename:
-        image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image_filename)
+        image_path = os.path.join(app.root_path, 'static', 'uploads', product.image_filename)
         if os.path.exists(image_path):
             os.remove(image_path)
             
@@ -253,8 +239,5 @@ def sales_history():
     return render_template('history.html', sales=all_sales)
 
 if __name__ == '__main__':
-    # This block is now only for local development
-    try:
-        app.run(debug=True)
-    except Exception as e:
-        print(f"An error occurred during local application startup: {e}")
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
