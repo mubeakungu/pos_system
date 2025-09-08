@@ -3,6 +3,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, curren
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 import os
+import re
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_very_secret_key' # Change this to a real secret key
@@ -59,7 +60,23 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html')
+    # Fetch data from the database to populate the dashboard
+    all_sales = Sale.query.all()
+    
+    total_sales = sum(sale.total_amount for sale in all_sales)
+    
+    total_items = 0
+    # The current 'items' field is a string, so we need to parse it to get a count.
+    # A better approach would be to store item data in a structured format like JSON.
+    for sale in all_sales:
+        # Example parsing: "Apple x1, Banana x2" -> 1 + 2 = 3
+        items_list = sale.items.split(', ')
+        for item_str in items_list:
+            match = re.search(r'x(\d+)', item_str)
+            if match:
+                total_items += int(match.group(1))
+
+    return render_template('index.html', total_sales=total_sales, total_items=total_items)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
