@@ -1,174 +1,197 @@
-import os
-from flask import Flask, render_template_string, request, jsonify
-
-# Template for the POS system
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple POS System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            color: #1f2937;
-        }
-    </style>
-</head>
-<body class="flex items-center justify-center min-h-screen p-4">
-
-    <div class="bg-white shadow-xl rounded-lg p-8 w-full max-w-4xl flex flex-col md:flex-row space-y-8 md:space-y-0 md:space-x-8">
-
-        <!-- Product List Section -->
-        <div class="flex-1">
-            <h2 class="text-2xl font-bold mb-6 text-gray-800">Products</h2>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4" id="product-list">
-                {% for product in PRODUCTS %}
-                <div class="bg-gray-100 rounded-lg p-4 cursor-pointer hover:bg-blue-200 transition-colors duration-200 ease-in-out" onclick="addToCart('{{ product.name }}', {{ product.price }})">
-                    <p class="font-semibold text-gray-800">{{ product.name }}</p>
-                    <p class="text-gray-600">${{ "%.2f"|format(product.price|float) }}</p>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <!-- Cart Section -->
-        <div class="w-full md:w-96 flex flex-col justify-between bg-gray-50 rounded-lg p-6">
-            <div>
-                <h2 class="text-2xl font-bold mb-4 text-gray-800">Cart</h2>
-                <div id="cart-items" class="space-y-4">
-                    <!-- Cart items will be added here by JavaScript -->
-                    <div id="empty-cart-message" class="text-center text-gray-500 italic">Cart is empty.</div>
-                </div>
-            </div>
-
-            <div class="mt-8 pt-4 border-t border-gray-300">
-                <div class="flex justify-between items-center text-lg font-semibold text-gray-800">
-                    <span>Subtotal:</span>
-                    <span id="subtotal-amount">$0.00</span>
-                </div>
-                <div class="flex justify-between items-center text-lg font-semibold text-gray-800">
-                    <span>Tax (8%):</span>
-                    <span id="tax-amount">$0.00</span>
-                </div>
-                <div class="flex justify-between items-center text-2xl font-bold text-gray-900 mt-2">
-                    <span>Total:</span>
-                    <span id="total-amount">$0.00</span>
-                </div>
-                <button onclick="checkout()" class="w-full mt-4 bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 transition-colors duration-200 ease-in-out">
-                    Checkout
-                </button>
-            </div>
-        </div>
-
-    </div>
-
-    <script>
-        let cart = {};
-
-        const subtotalEl = document.getElementById('subtotal-amount');
-        const taxEl = document.getElementById('tax-amount');
-        const totalEl = document.getElementById('total-amount');
-        const cartItemsEl = document.getElementById('cart-items');
-        const emptyCartMessageEl = document.getElementById('empty-cart-message');
-
-        function updateTotals() {
-            let subtotal = 0;
-            for (const item in cart) {
-                subtotal += cart[item].price * cart[item].quantity;
-            }
-            const tax = subtotal * 0.08;
-            const total = subtotal + tax;
-
-            subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
-            taxEl.textContent = `$${tax.toFixed(2)}`;
-            totalEl.textContent = `$${total.toFixed(2)}`;
-        }
-
-        function renderCart() {
-            cartItemsEl.innerHTML = '';
-            let cartIsEmpty = true;
-            for (const item in cart) {
-                cartIsEmpty = false;
-                const cartItem = document.createElement('div');
-                cartItem.className = 'flex justify-between items-center bg-white p-3 rounded-lg shadow-sm';
-                cartItem.innerHTML = `
-                    <div class="flex-1">
-                        <p class="font-semibold text-gray-800">${item}</p>
-                        <p class="text-sm text-gray-600">$${cart[item].price.toFixed(2)} x ${cart[item].quantity}</p>
-                    </div>
-                    <p class="font-bold text-gray-800">$${(cart[item].price * cart[item].quantity).toFixed(2)}</p>
-                `;
-                cartItemsEl.appendChild(cartItem);
-            }
-            
-            if (cartIsEmpty) {
-                emptyCartMessageEl.style.display = 'block';
-            } else {
-                emptyCartMessageEl.style.display = 'none';
-            }
-
-            updateTotals();
-        }
-
-        function addToCart(name, price) {
-            if (cart[name]) {
-                cart[name].quantity++;
-            } else {
-                cart[name] = { price: price, quantity: 1 };
-            }
-            renderCart();
-        }
-        
-        function checkout() {
-            if (Object.keys(cart).length === 0) {
-                alert("Your cart is empty. Please add items to check out.");
-                return;
-            }
-            
-            const receipt = Object.entries(cart).map(([name, item]) => {
-                const total = (item.price * item.quantity).toFixed(2);
-                return `${item.quantity} x ${name} @ $${item.price.toFixed(2)} = $${total}`;
-            }).join('\\n');
-
-            alert("Checkout complete!\\n\\nReceipt:\\n" + receipt);
-            
-            // Clear the cart after successful checkout
-            cart = {};
-            renderCart();
-        }
-
-        // Initial render
-        renderCart();
-
-    </script>
-</body>
-</html>
-"""
+import datetime
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your_secret_key_here' # You should use a strong, random key in production
 
-PRODUCTS = [
-    {"name": "Coffee", "price": 2.50},
-    {"name": "Muffin", "price": 3.00},
-    {"name": "Espresso", "price": 3.50},
-    {"name": "Croissant", "price": 2.75},
-    {"name": "Latte", "price": 4.00},
-    {"name": "Tea", "price": 2.00},
-    {"name": "Bagel", "price": 3.25},
-    {"name": "Juice", "price": 3.50},
-]
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# --- In-memory Data Stores (for demonstration purposes) ---
+# In a real application, you would use a database like PostgreSQL or SQLite.
+products = {
+    "1": {"name": "Laptop", "price": 1200.00},
+    "2": {"name": "Mouse", "price": 25.00},
+    "3": {"name": "Keyboard", "price": 75.00},
+}
+
+sales_history = []
+current_transaction = []
+
+# Dummy user data for demonstration
+users = {
+    "admin": {"password": "password123"},
+    "user1": {"password": "userpass"}
+}
+
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
+    
+    def get_id(self):
+        return str(self.id)
+
+@login_manager.user_loader
+def load_user(user_id):
+    """
+    Required user loader for Flask-Login.
+    Loads a user from the dummy database.
+    """
+    if user_id in users:
+        return User(user_id)
+    return None
+
+# --- Helper Functions ---
+def get_total_sales():
+    """Calculates the total revenue from all completed sales transactions."""
+    total = 0.0
+    for sale in sales_history:
+        total += sale['total']
+    return total
+
+def get_total_items_sold():
+    """Counts the total number of items sold across all transactions."""
+    total = 0
+    for sale in sales_history:
+        for item in sale['items']:
+            total += item['quantity']
+    return total
+
+# --- Routes ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """
+    Handles user login.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username in users and users[username]['password'] == password:
+            user = User(username)
+            login_user(user)
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid username or password', 'error')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    """
+    Handles user logout.
+    """
+    logout_user()
+    return redirect(url_for('login'))
+
 
 @app.route('/')
+@login_required
 def home():
-    return render_template_string(HTML_TEMPLATE, PRODUCTS=PRODUCTS)
+    """
+    Renders the main dashboard page.
+    Displays key metrics like total sales and items sold.
+    """
+    total_sales = get_total_sales()
+    total_items = get_total_items_sold()
+    return render_template('index.html', total_sales=total_sales, total_items=total_items)
 
+@app.route('/products', methods=['GET', 'POST'])
+@login_required
+def manage_products():
+    """
+    Handles displaying and adding new products.
+    GET: Renders the products management page with a list of all products.
+    POST: Processes the form submission to add a new product to the system.
+    """
+    if request.method == 'POST':
+        product_id = str(len(products) + 1)
+        product_name = request.form['name']
+        try:
+            product_price = float(request.form['price'])
+            products[product_id] = {"name": product_name, "price": product_price}
+        except ValueError:
+            # Handle cases where price is not a valid number
+            pass
+        return redirect(url_for('manage_products'))
+    
+    return render_template('products.html', products=products)
+
+@app.route('/sales', methods=['GET', 'POST'])
+@login_required
+def process_sales():
+    """
+    Handles the sales transaction process.
+    GET: Renders the sales page, showing the current transaction.
+    POST: Processes the addition of an item to the current transaction.
+    """
+    global current_transaction
+    
+    if request.method == 'POST':
+        product_id = request.form['product_id']
+        try:
+            quantity = int(request.form['quantity'])
+            if quantity > 0 and product_id in products:
+                product = products[product_id]
+                current_transaction.append({
+                    "id": product_id,
+                    "name": product["name"],
+                    "price": product["price"],
+                    "quantity": quantity,
+                    "subtotal": product["price"] * quantity
+                })
+        except (ValueError, KeyError):
+            # Handle cases where quantity is not a valid number or product doesn't exist
+            pass
+        return redirect(url_for('process_sales'))
+    
+    transaction_total = sum(item['subtotal'] for item in current_transaction)
+    return render_template('sales.html', products=products, transaction=current_transaction, total=transaction_total)
+
+@app.route('/complete_sale', methods=['POST'])
+@login_required
+def complete_sale():
+    """
+    Finalizes the current sales transaction and saves it to history.
+    """
+    global current_transaction
+    if current_transaction:
+        sales_history.append({
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "items": current_transaction,
+            "total": sum(item['subtotal'] for item in current_transaction)
+        })
+        current_transaction = []  # Reset the current transaction
+    return redirect(url_for('process_sales'))
+
+@app.route('/cancel_sale', methods=['POST'])
+@login_required
+def cancel_sale():
+    """
+    Clears the current sales transaction without saving.
+    """
+    global current_transaction
+    current_transaction = []
+    return redirect(url_for('process_sales'))
+
+@app.route('/history')
+@login_required
+def view_history():
+    """
+    Renders the sales history page.
+    """
+    return render_template('history.html', sales=sales_history)
+
+
+# --- Main entry point ---
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    app.run(debug=True)
+
 # This block is for local development only. Gunicorn handles this in production.
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
