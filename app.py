@@ -73,6 +73,7 @@ def load_user(user_id):
 def index():
     # Fetch data from the database to populate the dashboard
     all_sales = Sale.query.all()
+    all_products = Product.query.all()
     
     total_sales = sum(sale.total_amount for sale in all_sales)
     
@@ -87,7 +88,7 @@ def index():
             if match:
                 total_items += int(match.group(1))
 
-    return render_template('index.html', total_sales=total_sales, total_items=total_items)
+    return render_template('index.html', total_sales=total_sales, total_items=total_items, products=all_products)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -141,6 +142,49 @@ def manage_products():
     # Convert query result to a dictionary for easy access in template
     products_dict = {str(p.id): p for p in all_products}
     return render_template('products.html', products=products_dict)
+
+@app.route('/products/edit/<int:product_id>', methods=['GET', 'POST'])
+@login_required
+def edit_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    if request.method == 'POST':
+        product.name = request.form.get('name')
+        product.price = float(request.form.get('price'))
+        
+        image = request.files.get('image')
+        if image and image.filename:
+            # Delete old image if it exists
+            if product.image_filename:
+                old_image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image_filename)
+                if os.path.exists(old_image_path):
+                    os.remove(old_image_path)
+            
+            filename = secure_filename(image.filename)
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            image.save(image_path)
+            product.image_filename = filename
+
+        db.session.commit()
+        flash('Product updated successfully!', 'success')
+        return redirect(url_for('manage_products'))
+    
+    return render_template('edit_product.html', product=product)
+
+@app.route('/products/delete/<int:product_id>', methods=['POST'])
+@login_required
+def delete_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    
+    # Delete the associated image file
+    if product.image_filename:
+        image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image_filename)
+        if os.path.exists(image_path):
+            os.remove(image_path)
+            
+    db.session.delete(product)
+    db.session.commit()
+    flash('Product deleted successfully!', 'success')
+    return redirect(url_for('manage_products'))
 
 @app.route('/sales', methods=['GET', 'POST'])
 @login_required
