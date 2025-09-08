@@ -5,23 +5,18 @@ import datetime
 import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_very_secret_key' # Change this to a real secret key
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pos.db'
+# Use environment variables for production configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_very_secret_key')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# This part is a fix for a known issue with some PostgreSQL providers
+if app.config['SQLALCHEMY_DATABASE_URI'] and app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-
-# In-memory data for demonstration
-products = {
-    "1": {"name": "Apple", "price": 0.5},
-    "2": {"name": "Banana", "price": 0.3},
-    "3": {"name": "Orange", "price": 0.6},
-}
-
-sales_history = []
-active_transaction = []
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -39,7 +34,7 @@ class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     total_amount = db.Column(db.Float, nullable=False)
-    items = db.Column(db.String(500), nullable=False) # Store as a string or JSON
+    items = db.Column(db.String(500), nullable=False)
 
 # Move database initialization outside of __main__ block
 with app.app_context():
@@ -95,13 +90,6 @@ def login():
     
     return render_template('login.html')
 
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('You have been logged out.', 'success')
-    return redirect(url_for('login'))
-
 @app.route('/products', methods=['GET', 'POST'])
 @login_required
 def manage_products():
@@ -155,7 +143,6 @@ def edit_product(product_id):
         return redirect(url_for('manage_products'))
     return render_template('edit_product.html', product=product)
 
-
 @app.route('/products/delete/<int:product_id>', methods=['POST'])
 @login_required
 def delete_product(product_id):
@@ -175,7 +162,6 @@ def delete_product(product_id):
 @app.route('/sales', methods=['GET', 'POST'])
 @login_required
 def process_sales():
-    global active_transaction
     
     if request.method == 'POST':
         product_id = request.form.get('product_id')
@@ -190,36 +176,39 @@ def process_sales():
                 'quantity': quantity,
                 'subtotal': product.price * quantity
             }
+            # Use a session variable or a database table for the active transaction
+            # to handle the state across requests.
+            active_transaction = session.get('active_transaction', [])
             active_transaction.append(item)
+            session['active_transaction'] = active_transaction
             flash(f'{item["name"]} added to cart.', 'success')
         else:
             flash('Product not found.', 'error')
 
-    total = sum(item['subtotal'] for item in active_transaction)
+    total = sum(item['subtotal'] for item in session.get('active_transaction', []))
     all_products = Product.query.all()
     products_dict = {str(p.id): p for p in all_products}
     
-    return render_template('sales.html', products=products_dict, transaction=active_transaction, total=total)
+    return render_template('sales.html', products=products_dict, transaction=session.get('active_transaction', []), total=total)
 
 @app.route('/complete_sale', methods=['POST'])
 @login_required
 def complete_sale():
-    global active_transaction, sales_history
-    if not active_transaction:
+    if not session.get('active_transaction'):
         flash('Cannot complete an empty sale.', 'error')
         return redirect(url_for('process_sales'))
     
-    total_amount = sum(item['subtotal'] for item in active_transaction)
+    total_amount = sum(item['subtotal'] for item in session.get('active_transaction'))
     
     # Store items as a simple string for now
-    items_str = ", ".join([f'{item["name"]} x{item["quantity"]}' for item in active_transaction])
+    items_str = ", ".join([f'{item["name"]} x{item["quantity"]}' for item in session.get('active_transaction')])
     
     new_sale = Sale(total_amount=total_amount, items=items_str)
     db.session.add(new_sale)
     db.session.commit()
     
     # Clear the active transaction
-    active_transaction = []
+    session['active_transaction'] = []
     
     flash('Sale completed successfully!', 'success')
     return redirect(url_for('process_sales'))
@@ -227,8 +216,7 @@ def complete_sale():
 @app.route('/cancel_sale', methods=['POST'])
 @login_required
 def cancel_sale():
-    global active_transaction
-    active_transaction = []
+    session['active_transaction'] = []
     flash('Sale cancelled.', 'info')
     return redirect(url_for('process_sales'))
 
