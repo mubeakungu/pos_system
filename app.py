@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 import datetime
 import os
 from collections import defaultdict
@@ -20,6 +21,9 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Initialize Flask-Migrate here
+migrate = Migrate(app, db)
 
 # Cloudinary configuration
 # You MUST set these environment variables in your deployment environment
@@ -159,7 +163,7 @@ def edit_product(product_id):
             except Exception as e:
                 flash(f'Image upload failed: {e}', 'error')
                 return redirect(url_for('edit_product', product_id=product_id))
-        
+            
         db.session.commit()
         flash('Product updated successfully!', 'success')
         return redirect(url_for('manage_products'))
