@@ -1,3 +1,5 @@
+# app.py
+
 import os
 import datetime
 import json
@@ -34,6 +36,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+# Initialize Flask-Migrate with the app and db
 migrate = Migrate(app, db)
 
 # Cloudinary configuration
@@ -79,25 +82,6 @@ class Sale(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     total_amount = db.Column(db.Float, nullable=False)
     items = db.Column(db.Text, nullable=False)
-
-# --- Database Initialization ---
-def init_database():
-    """Initializes database and adds a default admin user."""
-    try:
-        with app.app_context():
-            db.create_all()
-            print("✅ Database tables created successfully")
-            existing_admin = User.query.filter_by(username='admin').first()
-            if not existing_admin:
-                admin_user = User(username='admin', password='pass123')
-                db.session.add(admin_user)
-                db.session.commit()
-                print("✅ Default admin user created: username='admin', password='pass123'")
-            else:
-                print("✅ Admin user already exists")
-    except Exception as e:
-        print(f"❌ Database initialization error: {e}")
-        print("Check your DATABASE_URL environment variable")
 
 # --- User Loader ---
 @login_manager.user_loader
@@ -356,7 +340,6 @@ def sales_history():
         completed_sales = []
         for sale in Sale.query.order_by(Sale.timestamp.desc()).all():
             try:
-                # Use json.loads directly on the text field
                 items_data = json.loads(sale.items)
                 item_count = sum(item.get('quantity', 0) for item in items_data)
             except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -415,8 +398,5 @@ def sales_history():
 
 # --- Main App Execution ---
 if __name__ == '__main__':
-    with app.app_context():
-        init_database()
-        
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
