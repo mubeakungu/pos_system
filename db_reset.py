@@ -1,4 +1,4 @@
- This script is a one-time tool to reset the database schema.
+# This script is a one-time tool to reset the database schema.
 # It should only be run if you need to wipe all data and start fresh
 # with a new set of SQLAlchemy models.
 
