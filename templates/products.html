@@ -74,11 +74,27 @@
                                 </form>
                             </td>
 
-                            <!-- Order Button -->
+                            <!-- FIXED: Order Button with proper form -->
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <button onclick="addToOrder('{{ product.id }}')" class="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold hover:bg-green-600 transition-colors duration-300">
-                                    Order
-                                </button>
+                                <!-- Option 1: Simple form that redirects to sales page -->
+                                <form action="{{ url_for('process_sales') }}" method="get" class="inline">
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold hover:bg-green-600 transition-colors duration-300">
+                                        Order
+                                    </button>
+                                </form>
+                                
+                                <!-- Option 2: Form with quantity input (uncomment to use this instead) -->
+                                <!--
+                                <form action="{{ url_for('process_sales') }}" method="post" class="inline-flex items-center space-x-2">
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <input type="number" name="quantity" value="1" min="1" max="{{ product.quantity }}" 
+                                           class="w-16 px-2 py-1 border border-gray-300 rounded text-xs">
+                                    <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold hover:bg-green-600 transition-colors duration-300">
+                                        Add to Cart
+                                    </button>
+                                </form>
+                                -->
                             </td>
                         </tr>
                         {% endfor %}
@@ -88,4 +104,34 @@
         </div>
     </div>
 </div>
+
+<!-- Optional: JavaScript for more advanced functionality -->
+<script>
+function addToOrder(productId) {
+    // This function was missing - here's a simple implementation
+    window.location.href = "{{ url_for('process_sales') }}?product_id=" + productId;
+}
+
+// Alternative: Add to cart with AJAX (more advanced)
+function addToCartAjax(productId, quantity = 1) {
+    fetch("{{ url_for('process_sales') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `product_id=${productId}&quantity=${quantity}`
+    })
+    .then(response => {
+        if (response.ok) {
+            alert('Product added to cart!');
+        } else {
+            alert('Error adding product to cart');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding product to cart');
+    });
+}
+</script>
 {% endblock %}
