@@ -301,13 +301,17 @@ def process_sales():
 
     try:
         total = sum(item['subtotal'] for item in session.get('active_transaction', []))
-        all_products = Product.query.all()
+        
+        # FIXED: Fetch products as a list and convert to a dictionary
+        all_products_list = Product.query.all()
+        all_products_dict = {p.id: p for p in all_products_list} # Convert to dictionary
+
     except Exception as e:
         print(f"Error loading sales data: {e}")
         total = 0
-        all_products = []
+        all_products_dict = {} # Use an empty dictionary
         
-    return render_template('sales.html', products=all_products, transaction=session.get('active_transaction', []), total=total)
+    return render_template('sales.html', products=all_products_dict, transaction=session.get('active_transaction', []), total=total)
 
 @app.route('/complete_sale', methods=['POST'])
 @login_required
