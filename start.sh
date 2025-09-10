@@ -1,14 +1,14 @@
-# start.sh
+#!/bin/bash
 
-# Set the FLASK_APP environment variable so Flask knows where to find the app
-export FLASK_APP=app.py
+Ensure the migrations folder exists before running any migrations
+if [ ! -d "migrations" ]; then
+echo "Migrations directory not found, initializing..."
+flask db init
+flask db migrate -m "Initial migration"
+fi
 
-# Install dependencies from requirements.txt
-pip install -r requirements.txt
-
-# Run database migrations
+Run database migrations
 flask db upgrade
 
-# Start the Gunicorn server, binding to the port provided by Render
-gunicorn --bind 0.0.0.0:$PORT app:app
-
+Start the web server
+gunicorn --bind 0.0.0.0:10000 --workers 4 --threads 2 app:app
