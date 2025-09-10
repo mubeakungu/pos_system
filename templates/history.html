@@ -1,39 +1,199 @@
 {% extends "layout.html" %}
 
 {% block content %}
-
 <div class="text-center mb-8">
-<h1 class="text-4xl font-extrabold text-gray-800">Sales History</h1>
-<p class="text-gray-600 mt-2">A complete record of all completed sales transactions.</p>
+    <h1 class="text-4xl font-extrabold text-gray-800">Sales History & Analytics</h1>
+    <p class="text-gray-600 mt-2">A comprehensive overview of your sales data and inventory.</p>
 </div>
 
-{% if sales %}
+<!-- Completed Sales and Ongoing Transactions -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    <!-- Completed Sales -->
+    <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Completed Sales</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale ID</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for sale in completed_sales %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ sale.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ sale.date }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">KShs {{ "%.2f" | format(sale.total) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ sale.item_count }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">No completed sales yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-<div class="space-y-6"> {% for sale in sales %} <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200"> <div class="flex justify-between items-center mb-4"> <h2 class="text-xl font-bold text-gray-700">Transaction on {{ sale.timestamp }}</h2> <span class="text-3xl font-bold text-green-600">${{ "%.2f" | format(sale.total) }}</span> </div>
-
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                {% for item in sale.items %}
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.name }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.quantity }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${{ "%.2f" | format(item.price) }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">${{ "%.2f" | format(item.subtotal) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Ongoing Sales -->
+    <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Ongoing Transactions</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for transaction in ongoing_transactions %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ transaction.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ transaction.item_count }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">KShs {{ "%.2f" | format(transaction.total) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="px-6 py-4 text-center text-gray-500">No ongoing transactions.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
-{% endfor %}
 
-</div> {% else %} <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200 text-center text-gray-600"> <p class="text-xl">No sales history yet. Complete a sale on the <a href="{{ url_for('process_sales') }}" class="text-blue-600 hover:underline">Sales</a> page to see it here.</p> </div> {% endif %} {% endblock %}
+<hr class="my-8">
+
+<!-- Remaining Products and Bar Graph -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Remaining Products -->
+    <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Remaining Products</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for product in remaining_products %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.quantity }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-center text-gray-500">No products in inventory.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Most Purchased Products Bar Graph -->
+    <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center justify-center">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Most Purchased Products</h2>
+        <canvas id="purchaseChart" class="w-full h-96"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('purchaseChart').getContext('2d');
+        const labels = [];
+        const data = [];
+
+        // This data will be passed from your backend (e.g., Flask)
+        const mostPurchasedProducts = [
+            // Dummy data for demonstration. Replace with your actual data passed from the backend.
+            { name: 'Product A', count: 150 },
+            { name: 'Product B', count: 120 },
+            { name: 'Product C', count: 95 },
+            { name: 'Product D', count: 80 },
+            { name: 'Product E', count: 65 }
+        ];
+
+        mostPurchasedProducts.forEach(product => {
+            labels.push(product.name);
+            data.push(product.count);
+        });
+
+        const purchaseChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Items Sold',
+                    data: data,
+                    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Items'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Product'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(tooltipItem) {
+                                return ` ${tooltipItem.dataset.label}: ${tooltipItem.raw}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
+```
+eof
+
+This template includes a few different sections, each with a placeholder for data that would need to be passed from your backend. For instance, your Flask view function would look something like this:
+
+```python
+@app.route('/history')
+@login_required
+def sales_history():
+    completed_sales = get_completed_sales_from_db()
+    ongoing_transactions = get_ongoing_transactions_from_db()
+    remaining_products = get_remaining_products_from_db()
+    most_purchased_products = get_most_purchased_products_from_db()
+
+    return render_template(
+        'sales_history.html',
+        completed_sales=completed_sales,
+        ongoing_transactions=ongoing_transactions,
+        remaining_products=remaining_products,
+        most_purchased_products=most_purchased_products
+    )
