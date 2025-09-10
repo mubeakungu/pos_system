@@ -1,31 +1,28 @@
+import os
+import datetime
+import json
+from collections import defaultdict
+import cloudinary
+import cloudinary.uploader
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import datetime
-import os
-from collections import defaultdict
-import cloudinary
-import cloudinary.uploader
-import json # Import the json module to handle sale items safely
+from werkzeug.security import generate_password_hash, check_password_hash
 
+# --- App and Configuration Setup ---
 app = Flask(__name__)
-# Use environment variables for production configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_very_secret_key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 
-# CRITICAL FIX: Handle PostgreSQL URL format for newer SQLAlchemy versions
+# Handle PostgreSQL URL format and add SSL for Render
 if app.config['SQLALCHEMY_DATABASE_URI']:
     if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
         app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
-    
-    # Add SSL mode for Render PostgreSQL (IMPORTANT!)
     if 'sslmode' not in app.config['SQLALCHEMY_DATABASE_URI']:
         app.config['SQLALCHEMY_DATABASE_URI'] += '?sslmode=require'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# IMPORTANT: Add connection pool settings for better stability
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,
     'pool_recycle': 300,
@@ -37,8 +34,6 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-
-# Initialize Flask-Migrate here
 migrate = Migrate(app, db)
 
 # Cloudinary configuration
@@ -48,42 +43,50 @@ cloudinary.config(
     api_secret=os.environ.get('CLOUDINARY_API_SECRET')
 )
 
-# Database Models
+# --- Database Models ---
 class User(UserMixin, db.Model):
-    __tablename__ = 'users'  # Explicit table name
+    __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)  # Add timestamp
+    password_hash = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    @property
+    def password(self):
+        raise AttributeError('password is not a readable attribute')
+
+    @password.setter
+    def password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def verify_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Product(db.Model):
-    __tablename__ = 'products'  # Explicit table name
+    __tablename__ = 'products'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, default=0)
     image_url = db.Column(db.String(255), nullable=True)
     public_id = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)  # Add timestamp
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 class Sale(db.Model):
-    __tablename__ = 'sales'  # Explicit table name
+    __tablename__ = 'sales'
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     total_amount = db.Column(db.Float, nullable=False)
-    items = db.Column(db.Text, nullable=False)  # Changed to Text for larger data
+    items = db.Column(db.Text, nullable=False)
 
-# FIXED: Proper database initialization with error handling
+# --- Database Initialization ---
 def init_database():
-    """Initialize database with proper error handling"""
+    """Initializes database and adds a default admin user."""
     try:
         with app.app_context():
-            # Create all tables
             db.create_all()
             print("✅ Database tables created successfully")
-            
-            # Add default admin user only if it doesn't exist
             existing_admin = User.query.filter_by(username='admin').first()
             if not existing_admin:
                 admin_user = User(username='admin', password='pass123')
@@ -92,39 +95,27 @@ def init_database():
                 print("✅ Default admin user created: username='admin', password='pass123'")
             else:
                 print("✅ Admin user already exists")
-                
-            # Test database connection
-            user_count = User.query.count()
-            product_count = Product.query.count()
-            sale_count = Sale.query.count()
-            print(f"✅ Database connected. Users: {user_count}, Products: {product_count}, Sales: {sale_count}")
-            
     except Exception as e:
         print(f"❌ Database initialization error: {e}")
         print("Check your DATABASE_URL environment variable")
 
-# User Loader for Flask-Login
+# --- User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
-    try:
-        return User.query.get(int(user_id))
-    except:
-        return None
+    return User.query.get(int(user_id))
 
-# Routes (keeping your existing routes with some improvements)
+# --- Routes ---
 @app.route('/')
 @login_required
 def index():
     try:
         all_products = Product.query.all()
         total_sales = db.session.query(db.func.sum(Sale.total_amount)).scalar() or 0
-        
-        # Improved error handling for JSON parsing
         total_items = 0
         try:
             for sale in Sale.query.all():
                 if sale.items:
-                    items_data = json.loads(sale.items.replace("'", "\""))
+                    items_data = json.loads(sale.items)
                     total_items += sum(item.get('quantity', 0) for item in items_data)
         except (json.JSONDecodeError, KeyError, TypeError):
             total_items = 0
@@ -146,8 +137,7 @@ def login():
         
         try:
             user = User.query.filter_by(username=username).first()
-            
-            if user and user.password == password:
+            if user and user.verify_password(password):
                 login_user(user)
                 flash('Logged in successfully!', 'success')
                 return redirect(url_for('index'))
@@ -226,15 +216,12 @@ def edit_product(product_id):
             product.name = request.form.get('name')
             product.price = float(request.form.get('price'))
             product.quantity = int(request.form.get('quantity'))
-            product.updated_at = datetime.datetime.utcnow()  # Update timestamp
+            product.updated_at = datetime.datetime.utcnow()
             image = request.files.get('image')
 
             if image and image.filename:
-                # Delete old image from Cloudinary if it exists
                 if product.public_id:
                     cloudinary.uploader.destroy(product.public_id)
-                
-                # Save new image to Cloudinary
                 upload_result = cloudinary.uploader.upload(image)
                 product.image_url = upload_result['secure_url']
                 product.public_id = upload_result['public_id']
@@ -254,11 +241,8 @@ def edit_product(product_id):
 def delete_product(product_id):
     try:
         product = Product.query.get_or_404(product_id)
-        
-        # Delete the associated image from Cloudinary
         if product.public_id:
             cloudinary.uploader.destroy(product.public_id)
-                
         db.session.delete(product)
         db.session.commit()
         flash('Product deleted successfully!', 'success')
@@ -301,15 +285,12 @@ def process_sales():
 
     try:
         total = sum(item['subtotal'] for item in session.get('active_transaction', []))
-        
-        # FIXED: Fetch products as a list and convert to a dictionary
         all_products_list = Product.query.all()
-        all_products_dict = {p.id: p for p in all_products_list} # Convert to dictionary
-
+        all_products_dict = {p.id: p for p in all_products_list}
     except Exception as e:
         print(f"Error loading sales data: {e}")
         total = 0
-        all_products_dict = {} # Use an empty dictionary
+        all_products_dict = {}
         
     return render_template('sales.html', products=all_products_dict, transaction=session.get('active_transaction', []), total=total)
 
@@ -321,24 +302,23 @@ def complete_sale():
         return redirect(url_for('process_sales'))
     
     try:
-        total_amount = sum(item['subtotal'] for item in session.get('active_transaction'))
+        active_transaction = session.get('active_transaction', [])
+        total_amount = sum(item['subtotal'] for item in active_transaction)
         
-        # Update product quantities in the database
-        for item in session.get('active_transaction'):
+        for item in active_transaction:
             product = Product.query.get(item['id'])
             if product:
                 product.quantity -= item['quantity']
-                product.updated_at = datetime.datetime.utcnow()
+                db.session.add(product)
         
-        # Store items as a JSON string
-        items_str = json.dumps(session.get('active_transaction'))
+        items_str = json.dumps(active_transaction)
         
         new_sale = Sale(total_amount=total_amount, items=items_str)
         db.session.add(new_sale)
+        
         db.session.commit()
         
-        # Clear the active transaction
-        session['active_transaction'] = []
+        session.pop('active_transaction', None)
         
         flash('Sale completed successfully!', 'success')
     except Exception as e:
@@ -348,7 +328,6 @@ def complete_sale():
         
     return redirect(url_for('process_sales'))
 
-# Keep your other existing routes (remove_item_from_sale, cancel_sale, sales_history)
 @app.route('/remove_item_from_sale/<int:item_id>', methods=['POST'])
 @login_required
 def remove_item_from_sale(item_id):
@@ -377,9 +356,11 @@ def sales_history():
         completed_sales = []
         for sale in Sale.query.order_by(Sale.timestamp.desc()).all():
             try:
-                items_data = json.loads(sale.items.replace("'", "\""))
+                # Use json.loads directly on the text field
+                items_data = json.loads(sale.items)
                 item_count = sum(item.get('quantity', 0) for item in items_data)
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                print(f"Error processing sales history item {sale.id}: {e}")
                 item_count = 0
                 
             completed_sales.append({
@@ -400,14 +381,14 @@ def sales_history():
             for p in Product.query.order_by(Product.name).all()
         ]
 
-        # Calculate most purchased products
         purchase_counts = defaultdict(int)
         for sale in Sale.query.all():
             try:
-                items_data = json.loads(sale.items.replace("'", "\""))
+                items_data = json.loads(sale.items)
                 for item in items_data:
                     purchase_counts[item.get('name', '')] += item.get('quantity', 0)
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                print(f"Error calculating purchase counts for sale {sale.id}: {e}")
                 continue
         
         most_purchased_products = sorted(
@@ -432,9 +413,10 @@ def sales_history():
         most_purchased_products=most_purchased_products
     )
 
-# Initialize database when module loads
-init_database()
-
+# --- Main App Execution ---
 if __name__ == '__main__':
+    with app.app_context():
+        init_database()
+        
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)  # Set debug=False for production
+    app.run(host='0.0.0.0', port=port, debug=False)
