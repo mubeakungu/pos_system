@@ -41,6 +41,7 @@ class Sale(db.Model):
 
 # Move database initialization outside of __main__ block
 with app.app_context():
+    db.drop_all() # This line will delete all existing tables.
     db.create_all()
     # Add a default admin user if the database is new
     if not User.query.filter_by(username='admin').first():
