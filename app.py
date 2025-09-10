@@ -7,6 +7,7 @@ import os
 from collections import defaultdict
 import cloudinary
 import cloudinary.uploader
+import json # Import the json module to handle sale items safely
 
 app = Flask(__name__)
 # Use environment variables for production configuration
@@ -76,7 +77,8 @@ def load_user(user_id):
 def index():
     all_products = Product.query.all()
     total_sales = db.session.query(db.func.sum(Sale.total_amount)).scalar() or 0
-    total_items = sum(item['quantity'] for sale in Sale.query.all() for item in eval(sale.items))
+    # Safely load items from string before summing
+    total_items = sum(item['quantity'] for sale in Sale.query.all() for item in json.loads(sale.items.replace("'", "\"")))
     return render_template('index.html', total_sales=total_sales, total_items=total_items, products=all_products)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -137,8 +139,8 @@ def manage_products():
         return redirect(url_for('manage_products'))
 
     all_products = Product.query.all()
-    products_dict = {str(p.id): p for p in all_products}
-    return render_template('products.html', products=products_dict)
+    # Pass the list of Product objects directly
+    return render_template('products.html', products=all_products)
 
 @app.route('/products/edit/<int:product_id>', methods=['GET', 'POST'])
 @login_required
@@ -211,9 +213,8 @@ def process_sales():
 
     total = sum(item['subtotal'] for item in session.get('active_transaction', []))
     all_products = Product.query.all()
-    products_dict = {str(p.id): p for p in all_products}
-    
-    return render_template('sales.html', products=products_dict, transaction=session.get('active_transaction', []), total=total)
+    # Pass the list of Product objects directly
+    return render_template('sales.html', products=all_products, transaction=session.get('active_transaction', []), total=total)
 
 @app.route('/remove_item_from_sale/<int:item_id>', methods=['POST'])
 @login_required
@@ -247,7 +248,7 @@ def complete_sale():
             db.session.add(product) # Re-add to session to track the change
     
     # Store items as a JSON string for easy retrieval
-    items_str = str(session.get('active_transaction'))
+    items_str = json.dumps(session.get('active_transaction'))
     
     new_sale = Sale(total_amount=total_amount, items=items_str)
     db.session.add(new_sale)
@@ -275,7 +276,8 @@ def sales_history():
             'id': sale.id,
             'date': sale.timestamp.strftime('%Y-%m-%d %H:%M'),
             'total': sale.total_amount,
-            'item_count': sum(item['quantity'] for item in eval(sale.items))
+            # Safely load items from string before summing
+            'item_count': sum(item['quantity'] for item in json.loads(sale.items.replace("'", "\"")))
         }
         for sale in Sale.query.order_by(Sale.timestamp.desc()).all()
     ]
@@ -298,7 +300,7 @@ def sales_history():
     # Calculate most purchased products
     purchase_counts = defaultdict(int)
     for sale in Sale.query.all():
-        for item in eval(sale.items):
+        for item in json.loads(sale.items.replace("'", "\"")):
             purchase_counts[item['name']] += item['quantity']
     
     most_purchased_products = sorted(
