@@ -4,6 +4,10 @@ from flask_sqlalchemy import SQLAlchemy
 import datetime
 import os
 from collections import defaultdict
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
 
 app = Flask(__name__)
 # Use environment variables for production configuration
