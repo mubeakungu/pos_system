@@ -41,7 +41,6 @@ class Sale(db.Model):
 
 # Move database initialization outside of __main__ block
 with app.app_context():
-    db.drop_all() # This line will delete all existing tables.
     db.create_all()
     # Add a default admin user if the database is new
     if not User.query.filter_by(username='admin').first():
@@ -49,15 +48,6 @@ with app.app_context():
         db.session.add(admin_user)
         db.session.commit()
         print("Default admin user created with username 'admin' and password 'pass123'")
-
-    # Add some initial products if none exist
-    if not Product.query.first():
-        p1 = Product(name='Coffee Mug', price=15.00, quantity=100)
-        p2 = Product(name='T-shirt', price=25.00, quantity=150)
-        p3 = Product(name='Notebook', price=8.50, quantity=200)
-        db.session.add_all([p1, p2, p3])
-        db.session.commit()
-        print("Initial products added to the database.")
 
 # User Loader for Flask-Login
 @login_manager.user_loader
@@ -98,10 +88,21 @@ def login():
 def manage_products():
     if request.method == 'POST':
         name = request.form.get('name')
-        price = float(request.form.get('price'))
-        quantity = int(request.form.get('quantity'))
+        price_str = request.form.get('price')
+        quantity_str = request.form.get('quantity')
         image = request.files.get('image')
         image_filename = None
+
+        if not name or not price_str or not quantity_str:
+            flash('Name, price, and quantity are required.', 'error')
+            return redirect(url_for('manage_products'))
+
+        try:
+            price = float(price_str)
+            quantity = int(quantity_str)
+        except (ValueError, TypeError):
+            flash('Price and quantity must be valid numbers.', 'error')
+            return redirect(url_for('manage_products'))
 
         if image and image.filename:
             image_filename = image.filename
