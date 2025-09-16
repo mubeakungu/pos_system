@@ -1,5 +1,3 @@
-# app.py
-
 import os
 import datetime
 import json
@@ -11,6 +9,10 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, curren
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
+# New imports for QR Code generation
+import qrcode
+import base64
+from io import BytesIO
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_very_secret_key')
@@ -82,11 +84,41 @@ class Sale(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     total_amount = db.Column(db.Float, nullable=False)
     items = db.Column(db.Text, nullable=False)
+    # New columns to store KRA-related data
+    kra_invoice_id = db.Column(db.String(255), nullable=True)
+    kra_qr_code_data = db.Column(db.String(512), nullable=True)
 
 # --- User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# --- Utility Functions ---
+def generate_qr_code_b64(data):
+    """
+    Generates a QR code for the given data and returns it as a base64 encoded string.
+    """
+    if not data:
+        return None
+    
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Save QR code to a BytesIO object
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    
+    # Encode to base64
+    qr_code_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return qr_code_b64
 
 # --- Routes ---
 @app.route('/')
@@ -297,14 +329,27 @@ def complete_sale():
         
         items_str = json.dumps(active_transaction)
         
-        new_sale = Sale(total_amount=total_amount, items=items_str)
+        # In a real KRA integration, you would make an API call here.
+        # For now, we'll simulate the data that would be returned.
+        kra_invoice_id = f"KRA-INV-{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        kra_qr_code_data = f"https://etims.kra.go.ke/verify?id={kra_invoice_id}"
+
+        new_sale = Sale(
+            total_amount=total_amount,
+            items=items_str,
+            kra_invoice_id=kra_invoice_id,
+            kra_qr_code_data=kra_qr_code_data
+        )
         db.session.add(new_sale)
         
         db.session.commit()
         
+        # Store the ID of the new sale in the session to easily redirect to its receipt
+        session['last_sale_id'] = new_sale.id
         session.pop('active_transaction', None)
         
         flash('Sale completed successfully!', 'success')
+        return redirect(url_for('view_receipt', sale_id=new_sale.id))
     except Exception as e:
         db.session.rollback()
         print(f"Error completing sale: {e}")
@@ -373,7 +418,7 @@ def sales_history():
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 print(f"Error calculating purchase counts for sale {sale.id}: {e}")
                 continue
-        
+            
         most_purchased_products = sorted(
             [{'name': name, 'count': count} for name, count in purchase_counts.items() if name],
             key=lambda x: x['count'],
@@ -395,6 +440,39 @@ def sales_history():
         remaining_products=remaining_products,
         most_purchased_products=most_purchased_products
     )
+
+@app.route('/view_receipt/<int:sale_id>')
+@login_required
+def view_receipt(sale_id):
+    try:
+        sale = Sale.query.get_or_404(sale_id)
+        
+        # Parse the items JSON
+        items = json.loads(sale.items)
+        
+        # Get KRA-related data from the Sale model
+        kra_invoice_id = sale.kra_invoice_id
+        qr_code_data = sale.kra_qr_code_data
+        
+        # Generate the QR code as a base64 string
+        qr_code_b64 = generate_qr_code_b64(qr_code_data)
+
+        # Get clerk username
+        clerk_username = current_user.username if current_user.is_authenticated else "N/A"
+        
+        return render_template(
+            'receipt.html',
+            sale=sale,
+            items=items,
+            kra_invoice_id=kra_invoice_id,
+            qr_code_b64=qr_code_b64,
+            clerk_username=clerk_username
+        )
+    except Exception as e:
+        print(f"Error viewing receipt: {e}")
+        flash('Error loading receipt.', 'error')
+        return redirect(url_for('sales_history'))
+
 
 # --- Main App Execution ---
 if __name__ == '__main__':
