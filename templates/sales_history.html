@@ -6,9 +6,7 @@
     <p class="text-gray-600 mt-2">A comprehensive overview of your sales data and inventory.</p>
 </div>
 
-<!-- Completed Sales and Ongoing Transactions -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-    <!-- Completed Sales -->
     <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Completed Sales</h2>
         <div class="overflow-x-auto">
@@ -19,6 +17,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -28,10 +27,13 @@
                         <td class="px-6 py-4 text-sm text-gray-500">{{ sale.date }}</td>
                         <td class="px-6 py-4 text-sm text-gray-500">KShs {{ "%.2f"|format(sale.total) }}</td>
                         <td class="px-6 py-4 text-sm text-gray-500">{{ sale.item_count }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            <a href="{{ url_for('view_receipt', sale_id=sale.id) }}" target="_blank" class="text-indigo-600 hover:text-indigo-900 font-semibold">View Receipt</a>
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">No completed sales yet.</td>
+                        <td colspan="5" class="px-6 py-4 text-center text-gray-500">No completed sales yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -39,7 +41,6 @@
         </div>
     </div>
 
-    <!-- Ongoing Transactions -->
     <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Ongoing Transactions</h2>
         <div class="overflow-x-auto">
@@ -69,11 +70,9 @@
     </div>
 </div>
 
-<hr class="my-8">
+---
 
-<!-- Remaining Products and Bar Graph -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- Remaining Products -->
     <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Remaining Products</h2>
         <div class="overflow-x-auto">
@@ -100,14 +99,12 @@
         </div>
     </div>
 
-    <!-- Most Purchased Products Bar Graph -->
     <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center justify-center">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Most Purchased Products</h2>
         <canvas id="purchaseChart" class="w-full h-96"></canvas>
     </div>
 </div>
 
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -164,5 +161,3 @@
     });
 </script>
 {% endblock %}
-
-
