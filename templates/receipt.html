@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt #{{ sale.id }}</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #000;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.4;
+        }
+        .container {
+            width: 300px;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .header, .footer {
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .header p {
+            margin: 0;
+        }
+        .receipt-info {
+            margin-top: 15px;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            padding: 5px 0;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .items-table th, .items-table td {
+            text-align: left;
+            padding: 3px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .items-table th:nth-child(2), .items-table td:nth-child(2),
+        .items-table th:nth-child(3), .items-table td:nth-child(3) {
+            text-align: right;
+        }
+        .totals {
+            margin-top: 10px;
+            text-align: right;
+            font-size: 14px;
+        }
+        .total-row {
+            font-weight: bold;
+        }
+        .kra-info {
+            margin-top: 15px;
+            text-align: center;
+            border-top: 1px dashed #000;
+            padding-top: 10px;
+        }
+        .qr-code {
+            display: block;
+            margin: 10px auto;
+            width: 100px; /* Adjust size as needed */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Your Business Name</h1>
+            <p>Your Street, City, ZIP</p>
+            <p>Tel: +254 7XX XXX XXX</p>
+            <p>KRA PIN: A123456789</p>
+        </div>
+        
+        <div class="receipt-info">
+            <p><strong>Receipt #:</strong> {{ sale.id }}</p>
+            <p><strong>Date:</strong> {{ sale.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+            <p><strong>Clerk:</strong> {{ clerk_username }}</p>
+        </div>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>Ksh {{ "%.2f"|format(item.price) }}</td>
+                    <td>Ksh {{ "%.2f"|format(item.subtotal) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <p class="total-row">Total: Ksh {{ "%.2f"|format(sale.total_amount) }}</p>
+        </div>
+
+        <div class="kra-info">
+            <p>KRA Control Unit Invoice ID:</p>
+            <p><strong>{{ kra_invoice_id }}</strong></p>
+            <p>Thank you for your purchase!</p>
+            {% if qr_code_b64 %}
+                <img src="data:image/png;base64,{{ qr_code_b64 }}" alt="KRA QR Code" class="qr-code">
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
