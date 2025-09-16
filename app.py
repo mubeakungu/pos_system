@@ -14,6 +14,11 @@ import qrcode
 import base64
 from io import BytesIO
 
+# --- ADD THESE TWO LINES ---
+from dotenv import load_dotenv
+load_dotenv()
+# --- END OF ADDITION ---
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_very_secret_key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
